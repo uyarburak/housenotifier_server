@@ -7,6 +7,7 @@
 
     :copyright: (c) 2017 by Burak UYAR.
 """
+import json
 import threading
 from sqlite3 import dbapi2 as sqlite3
 from pyfcm import FCMNotification
@@ -16,9 +17,12 @@ from flask import Flask, request, \
 # configuration
 DATABASE = '/tmp/house_notifier.db'
 DEBUG = True
+GCM_TOPIC_NAME = 'arduino'
+GCM_API_KEY = 'XXX'
 
 LAST_DOOR = datetime(1996, 4, 15, 16, 14)
 LAST_RING = datetime(1996, 4, 15, 16, 14)
+LAST_GAS = datetime(1996, 4, 15, 16, 14)
 TMP_DOOR = []
 TMP_RING = []
 
@@ -26,7 +30,6 @@ TMP_RING = []
 app = Flask(__name__)
 app.config.from_object(__name__)
 app.config.from_envvar('HOUSE_NOTIFIER_SETTINGS', silent=True)
-
 
 def get_db():
     """Opens a new database connection if there is none yet for the
@@ -68,6 +71,41 @@ def query_db(query, args=(), one=False):
     rv = cur.fetchall()
     return (rv[0] if rv else None) if one else rv
 
+def send_notification(message):
+    print 'sending notification'
+    #push_service = FCMNotification(api_key=app.config['GCM_API_KEY'])
+    #result = push_service.notify_topic_subscribers(topic_name=app.config['GCM_TOPIC_NAME'], message_body=message)
+
+@app.route('/logs/door')
+def logs_door():
+    return table_to_json('door_log')
+
+@app.route('/logs/ring')
+def logs_ring():
+    return table_to_json('ring_log')
+
+@app.route('/logs/gas')
+def logs_gas():
+    return table_to_json('gas_log')
+
+@app.route('/logs/phone')
+def logs_phone():
+    return table_to_json('phone_log')
+
+
+def table_to_json(table_name):
+    rows = query_db('select * from '+table_name)
+    if not rows:
+        return '[]'
+    atts = rows[0].keys()
+    arr = []
+    for row in rows:
+        obj = {}
+        for att in atts:
+            obj[att] = row[att]
+        arr.append(obj);
+    return json.dumps(arr)
+
 @app.route('/door')
 def door_opened():
     return common_method(door_log, 'LAST_DOOR', 'TMP_DOOR')
@@ -75,6 +113,15 @@ def door_opened():
 @app.route('/ring')
 def door_ringed():
     return common_method(door_log, 'LAST_RING', 'TMP_RING')
+
+@app.route('/gas/<threshold>/<measured_value>')
+def gas_alarm(threshold, measured_value):
+    diff = datetime.now() - app.config['LAST_GAS']
+    if diff > timedelta(minutes=2):
+        send_notification('3#Gas level out of threshold!#{}#{}'.format(threshold, measured_value))
+        app.config['LAST_GAS'] = datetime.now()
+        gas_log(measured_value)
+    return "OK"
 
 def common_method(logMethod, variable, arr, timeout=3):
     diff = datetime.now() - app.config[variable]
@@ -87,21 +134,19 @@ def common_method(logMethod, variable, arr, timeout=3):
 
 
 def ask_users(arr):
-    #push_service = FCMNotification(api_key="<api-key>")
-    #result = push_service.notify_topic_subscribers(topic_name="arduino", message_body="Evde misin bebisim xD")
+    send_notification('0#Are you at home?')
     app.config[arr] = []
     threading.Timer(15, check_answers, args=(arr,)).start()
     print "timer has start"
 
 def check_answers(arr):
-    TEMP = app.config[arr]
+    notification_message = '1#Door has opened' if arr == 'LAST_DOOR' else '2#Bell has rang'
     print 'checking answers'
-    print arr
-    print TEMP
-    if "1" in TEMP:
+    if "1" in app.config[arr]: # Do nothing if there is someone at home.
         print 'we are home'
-        return
-    print 'send notification'
+    else: # Send notification to everyone.
+        send_notification(notification_message)
+        print 'send notification'
 
 
 def door_log():
@@ -115,6 +160,12 @@ def ring_log():
     db.execute('insert into ring_log (id) values (null)');
     db.commit()
     print 'ring logged'
+
+def gas_log(value):
+    db = get_db()
+    db.execute('insert into gas_log (value) values (?)', [value]);
+    db.commit()
+    print 'gas logged'
 
 @app.route('/phone/<device_id>/<is_wifi>')
 def phone_log(device_id, is_wifi):

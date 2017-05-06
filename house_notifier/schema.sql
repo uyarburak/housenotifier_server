@@ -10,6 +10,13 @@ create table ring_log (
   time datetime default (datetime('now','localtime'))
 );
 
+drop table if exists gas_log;
+create table gas_log (
+  id integer primary key autoincrement,
+  time datetime default (datetime('now','localtime')),
+  value real not null
+);
+
 drop table if exists phone_log;
 create table phone_log (
   id integer primary key autoincrement,
