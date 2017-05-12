@@ -18,7 +18,8 @@ from flask import Flask, request, \
 DATABASE = '/tmp/house_notifier.db'
 DEBUG = True
 GCM_TOPIC_NAME = 'arduino'
-GCM_API_KEY = 'XXX'
+GCM_API_KEY = 'XXX' # CHANGE THIS
+ROUTER_MAC_ID = '98:FC:11:E1:0A:AE' # CHANGE THIS
 
 LAST_DOOR = datetime(1996, 4, 15, 16, 14)
 LAST_RING = datetime(1996, 4, 15, 16, 14)
@@ -134,7 +135,7 @@ def common_method(logMethod, variable, arr, timeout=3):
 
 
 def ask_users(arr):
-    send_notification('0#Are you at home?')
+    send_notification('0#Are you at home?#'+app.config['ROUTER_MAC_ID'])
     app.config[arr] = []
     threading.Timer(15, check_answers, args=(arr,)).start()
     print "timer has start"
