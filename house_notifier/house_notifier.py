@@ -19,7 +19,7 @@ DATABASE = '/tmp/house_notifier.db'
 DEBUG = True
 GCM_TOPIC_NAME = 'arduino'
 GCM_API_KEY = 'XXX' # CHANGE THIS
-ROUTER_MAC_ID = '98:FC:11:E1:0A:AE' # CHANGE THIS
+ROUTER_MAC_ID = '08:10:76:00:c3:4b' # CHANGE THIS
 
 LAST_DOOR = datetime(1996, 4, 15, 16, 14)
 LAST_RING = datetime(1996, 4, 15, 16, 14)
@@ -72,10 +72,10 @@ def query_db(query, args=(), one=False):
     rv = cur.fetchall()
     return (rv[0] if rv else None) if one else rv
 
-def send_notification(message):
+def send_notification(data_message):
     print 'sending notification'
-    #push_service = FCMNotification(api_key=app.config['GCM_API_KEY'])
-    #result = push_service.notify_topic_subscribers(topic_name=app.config['GCM_TOPIC_NAME'], message_body=message)
+    push_service = FCMNotification(api_key=app.config['GCM_API_KEY'])
+    result = push_service.notify_topic_subscribers(topic_name=app.config['GCM_TOPIC_NAME'], data_message=data_message)
 
 @app.route('/logs/door')
 def logs_door():
@@ -119,7 +119,13 @@ def door_ringed():
 def gas_alarm(threshold, measured_value):
     diff = datetime.now() - app.config['LAST_GAS']
     if diff > timedelta(minutes=2):
-        send_notification('3#Gas level out of threshold!#{}#{}'.format(threshold, measured_value))
+        data_message = {
+            "id" : "3",
+            "body" : "Gas level out of threshold!",
+            "threshold" : threshold,
+            "value": measured_value
+        }
+        send_notification(data_message)
         app.config['LAST_GAS'] = datetime.now()
         gas_log(measured_value)
     return "OK"
@@ -135,18 +141,32 @@ def common_method(logMethod, variable, arr, timeout=3):
 
 
 def ask_users(arr):
-    send_notification('0#Are you at home?#'+app.config['ROUTER_MAC_ID'])
+    data_message = {
+            "id" : "-1",
+            "body" : "Are you at home?",
+            "ssid" : app.config['ROUTER_MAC_ID']
+    }
+    send_notification(data_message)
     app.config[arr] = []
     threading.Timer(15, check_answers, args=(arr,)).start()
     print "timer has start"
 
 def check_answers(arr):
-    notification_message = '1#Door has opened' if arr == 'LAST_DOOR' else '2#Bell has rang'
+    if arr == 'TMP_DOOR':
+        data_message = {
+                "id" : "1",
+                "body" : "Door has opened"
+        }
+    else:
+        data_message = {
+                "id" : "2",
+                "body" : "Bell has rang"
+        }
     print 'checking answers'
     if "1" in app.config[arr]: # Do nothing if there is someone at home.
         print 'we are home'
     else: # Send notification to everyone.
-        send_notification(notification_message)
+        send_notification(data_message)
         print 'send notification'
 
 
