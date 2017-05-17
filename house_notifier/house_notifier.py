@@ -16,7 +16,7 @@ from flask import Flask, request, \
      abort, g, flash, _app_ctx_stack
 # configuration
 DATABASE = '/tmp/house_notifier.db'
-DEBUG = True
+DEBUG = False
 GCM_TOPIC_NAME = 'arduino'
 GCM_API_KEY = 'XXX' # CHANGE THIS
 ROUTER_MAC_ID = '08:10:76:00:c3:4b' # CHANGE THIS
@@ -198,3 +198,14 @@ def phone_log(device_id, is_wifi):
     db.commit()
     print 'phone logged'
     return 'welldone'
+
+@app.route('/notification', methods = ['GET', 'POST'])
+def notify():
+    data = request.form
+    print str(data)
+    data_message = {
+            "id" : "99",
+            "body" : data['message']
+    }
+    send_notification(data_message)
+    return "OK"
